@@ -3,7 +3,10 @@ import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import * as z from "zod/v4";
 
-const app = createMcpExpressApp();
+const app = createMcpExpressApp({
+  host: "0.0.0.0",
+  allowedHosts: ["prevent-servers-puzzle-advertise.trycloudflare.com"],
+});
 
 const handler = createMcpHandler(() => {
   const server = new McpServer({
@@ -43,7 +46,7 @@ app.all("/mcp", (req, res) => {
 
 const port = Number(process.env.PORT || 3000);
 
-app.listen(port, "127.0.0.1", () => {
+app.listen(port, "0.0.0.0", () => {
   console.log(
     "MCP server listening on http://127.0.0.1:" + port + "/mcp"
   );
