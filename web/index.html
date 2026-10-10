@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
+    />
+    <title>DupTrace</title>
+    <meta
+      name="description"
+      content="DupTrace — operations investigation assistant. Trace the signal, find the cause."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app__header">
+        <div class="brand">
+          <span class="brand__mark" aria-hidden="true"></span>
+          <h1 class="brand__name">DupTrace</h1>
+        </div>
+        <div class="status" role="status" aria-live="polite">
+          <span class="status__dot" data-state="ready" aria-hidden="true"></span>
+          <span class="status__label" id="statusLabel">Ready</span>
+        </div>
+      </header>
+
+      <main
+        class="conversation"
+        id="conversation"
+        aria-label="Conversation with DupTrace"
+        aria-live="polite"
+      >
+        <noscript>
+          <p class="noscript">
+            DupTrace needs JavaScript enabled to run the conversational
+            interface.
+          </p>
+        </noscript>
+      </main>
+
+      <form class="composer" id="composer" aria-label="Ask DupTrace a question">
+        <label class="composer__label" for="composerInput">Ask DupTrace</label>
+        <div class="composer__field">
+          <textarea
+            id="composerInput"
+            class="composer__input"
+            name="message"
+            rows="1"
+            autocomplete="off"
+            spellcheck="true"
+            enterkeyhint="send"
+            placeholder="Ask about your services, incidents, or deployments…"
+            aria-describedby="composerHint"
+          ></textarea>
+          <button type="submit" class="composer__send" id="sendButton" aria-label="Send message">
+            <svg
+              class="composer__send-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path
+                d="M12 20V6M6 12l6-6 6 6"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            <span class="composer__spinner" aria-hidden="true"></span>
+          </button>
+        </div>
+        <p class="composer__hint" id="composerHint">
+          Press Enter to send, Shift + Enter for a new line.
+        </p>
+      </form>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
