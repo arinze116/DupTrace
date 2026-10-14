@@ -179,7 +179,7 @@ const parseToolArguments = (value) => {
   }
 };
 
-const createOpenAiCompatibleProvider = () => {
+export const createOpenAiCompatibleProvider = () => {
   let apiKey;
   let model;
 
