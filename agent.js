@@ -120,7 +120,7 @@ const createDupTraceClient = async () => {
   let mcpUrl;
 
   try {
-    mcpUrl = getRequiredEnvironment("DUPTRACE_MCP_URL");
+    mcpUrl = process.env.DUPTRACE_MCP_URL?.trim() || (process.env.VERCEL === "1" && process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}/mcp` : getRequiredEnvironment("DUPTRACE_MCP_URL"));
   } catch (error) {
     throw createAgentError("MCP_UNAVAILABLE", error.message, error);
   }
