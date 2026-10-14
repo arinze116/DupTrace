@@ -179,7 +179,7 @@ The suite is self-contained — it uses in-process fixtures and **mocked** model
 | `_verify_env.mjs` | The `.env` loader (`env.js`): file parsing, real-env precedence, missing-file no-op. |
 | `_verify_format.mjs` | Pure evidence formatters (labels, previews, facts, causality caveat). |
 | `_verify_markdown.mjs` | The Markdown parser: tables, unsafe HTML/link handling, and partial/streaming safety. |
-| `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
+| `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including OpenAI-compatible timeout cleanup, Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
 | `_verify_web.mjs` | The real server end-to-end with a mocked provider: static assets, `/api/chat`, streaming, request validation, origin guard, follow-up context, MCP initialization, and a secret-leak scan of responses. |
 
 You can also run a one-shot agent request from the CLI (this one **does** use the configured provider and requires a valid key/config):
