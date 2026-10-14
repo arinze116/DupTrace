@@ -7,10 +7,11 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { writeFileSync, unlinkSync } from "node:fs";
+import { writeFileSync, unlinkSync, chmodSync } from "node:fs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STUB = join(HERE, "_stub_claude.mjs");
+const STUB_LAUNCHER = join(HERE, "_stub_claude_launcher.sh");
 const TIMEOUT_MS = 8000;
 const GEMINI_TIMEOUT_MS = 1000;
 
@@ -21,6 +22,7 @@ process.env.MODEL_TIMEOUT_MS = String(GEMINI_TIMEOUT_MS);
 const {
   parseClaudeAgentResponse,
   createClaudeCliProvider,
+  createOpenAiCompatibleProvider,
   createGeminiProvider,
   toGeminiRequest,
   toGeminiSchema,
@@ -66,9 +68,13 @@ const messages = [{ role: "user", content: "What's wrong with payments?" }];
 
 async function runProvider(scenario) {
   process.env.STUB_SCENARIO = scenario;
-  // Invoke the stub through node; shell:true (win32) appends the provider's flags,
-  // which the stub ignores.
-  process.env.MODEL_CLI_COMMAND = `"${process.execPath}" "${STUB}"`;
+  // On Windows, shell:true permits a quoted command plus script path. On POSIX,
+  // use an executable shim that ignores the Claude-specific flags appended by
+  // createClaudeCliProvider and launches the Node stub directly.
+  process.env.MODEL_CLI_COMMAND =
+    process.platform === "win32"
+      ? `"${process.execPath}" "${STUB}"`
+      : STUB_LAUNCHER;
   const provider = createClaudeCliProvider();
   const started = Date.now();
   try {
@@ -81,6 +87,14 @@ async function runProvider(scenario) {
 
 async function main() {
   writeFileSync(STUB, stubSource);
+  if (process.platform !== "win32") {
+    const quoteShell = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
+    writeFileSync(
+      STUB_LAUNCHER,
+      `#!/bin/sh\nexec ${quoteShell(process.execPath)} ${quoteShell(STUB)}\n`,
+    );
+    chmodSync(STUB_LAUNCHER, 0o755);
+  }
 
   try {
     console.log("\nparseClaudeAgentResponse — pure schema handling");
@@ -181,6 +195,11 @@ async function main() {
   } finally {
     try {
       unlinkSync(STUB);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(STUB_LAUNCHER);
     } catch {
       /* ignore */
     }
@@ -392,6 +411,8 @@ async function main() {
   console.log("\ncreateGeminiProvider — mocked fetch (no real API, no key)");
 
   const realFetch = global.fetch;
+  const realSetTimeout = global.setTimeout;
+  const realClearTimeout = global.clearTimeout;
   const realConsoleError = console.error;
   const FAKE_KEY = "AIza-TEST-gemini-key-DO-NOT-LEAK";
   const errLines = [];
@@ -400,6 +421,37 @@ async function main() {
   process.env.MODEL_NAME = "";
 
   try {
+    // OpenAI-compatible provider: a network rejection must still clear its timeout.
+    process.env.MODEL_PROVIDER = "openai-compatible";
+    process.env.MODEL_API_KEY = FAKE_KEY;
+    process.env.MODEL_NAME = "test-model";
+    let timerToken = null;
+    let timerCleared = false;
+    global.setTimeout = () => {
+      timerToken = {};
+      return timerToken;
+    };
+    global.clearTimeout = (token) => {
+      if (token === timerToken) timerCleared = true;
+    };
+    global.fetch = async () => { throw new Error("simulated network failure"); };
+    let openAiNetworkError = null;
+    try {
+      await createOpenAiCompatibleProvider().complete([{ role: "user", content: "test" }], []);
+    } catch (error) {
+      openAiNetworkError = error;
+    } finally {
+      global.setTimeout = realSetTimeout;
+      global.clearTimeout = realClearTimeout;
+    }
+    check(
+      "OpenAI-compatible fetch rejection clears its timeout",
+      openAiNetworkError instanceof Error && timerCleared,
+      timerCleared ? "" : "timeout was not cleared after fetch rejected",
+    );
+    process.env.MODEL_PROVIDER = "gemini";
+    process.env.MODEL_NAME = "";
+
     // 1) success text + request shape + auth header
     let captured = null;
     global.fetch = async (url, opts) => {

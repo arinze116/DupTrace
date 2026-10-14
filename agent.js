@@ -179,7 +179,7 @@ const parseToolArguments = (value) => {
   }
 };
 
-const createOpenAiCompatibleProvider = () => {
+export const createOpenAiCompatibleProvider = () => {
   let apiKey;
   let model;
 
@@ -230,29 +230,30 @@ const createOpenAiCompatibleProvider = () => {
     async complete(messages, tools) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), modelTimeoutMs);
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model,
-          messages: messages.map(toProviderMessage),
-          tools: tools.map((tool) => ({
-            type: "function",
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.inputSchema,
-            },
-          })),
-          tool_choice: "auto",
-        }),
-      });
 
       try {
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model,
+            messages: messages.map(toProviderMessage),
+            tools: tools.map((tool) => ({
+              type: "function",
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema,
+              },
+            })),
+            tool_choice: "auto",
+          }),
+        });
+
         if (!response.ok) {
           throw new Error(
             `Model provider returned HTTP ${response.status}: ${await response.text()}`
