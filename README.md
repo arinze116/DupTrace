@@ -126,7 +126,7 @@ Primary variables (see `.env.example`):
 | `MODEL_PROVIDER` | `gemini`, `openai-compatible`, or `claude-cli`. | *(required)* |
 | `MODEL_NAME` | Primary model id. For gemini, defaults to `gemini-3.5-flash-lite` when empty. | `gemini-3.1-flash-lite` (example) |
 | `MODEL_API_KEY` | Provider API key. Gemini → `x-goog-api-key`; openai-compatible → `Authorization: Bearer`. Unused by `claude-cli`. | *(empty)* |
-| `MODEL_FALLBACK_MODELS` | **Gemini only.** Comma-separated models tried in order on a transient failure. | `gemini-3.5-flash-lite` (example) |
+| `MODEL_FALLBACK_MODELS` | **Gemini only.** Comma-separated models tried in order on a transient failure. | `gemini-3.1-flash-lite` when unset; `.env.example` sets `gemini-3.5-flash-lite` |
 | `MODEL_BASE_URL` | **OpenAI-compatible only.** API base URL (gemini uses Google's fixed endpoint). | `https://api.openai.com/v1` |
 | `MODEL_CLI_COMMAND` | **Claude CLI only.** Executable to invoke. | `claude` |
 | `MAX_AGENT_STEPS` | Max model/tool loop iterations per investigation. | `12` |
