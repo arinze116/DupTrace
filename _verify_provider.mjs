@@ -21,6 +21,7 @@ process.env.MODEL_TIMEOUT_MS = String(GEMINI_TIMEOUT_MS);
 const {
   parseClaudeAgentResponse,
   createClaudeCliProvider,
+  createOpenAiCompatibleProvider,
   createGeminiProvider,
   toGeminiRequest,
   toGeminiSchema,
@@ -392,6 +393,8 @@ async function main() {
   console.log("\ncreateGeminiProvider — mocked fetch (no real API, no key)");
 
   const realFetch = global.fetch;
+  const realSetTimeout = global.setTimeout;
+  const realClearTimeout = global.clearTimeout;
   const realConsoleError = console.error;
   const FAKE_KEY = "AIza-TEST-gemini-key-DO-NOT-LEAK";
   const errLines = [];
@@ -400,6 +403,37 @@ async function main() {
   process.env.MODEL_NAME = "";
 
   try {
+    // OpenAI-compatible provider: a network rejection must still clear its timeout.
+    process.env.MODEL_PROVIDER = "openai-compatible";
+    process.env.MODEL_API_KEY = FAKE_KEY;
+    process.env.MODEL_NAME = "test-model";
+    let timerToken = null;
+    let timerCleared = false;
+    global.setTimeout = () => {
+      timerToken = {};
+      return timerToken;
+    };
+    global.clearTimeout = (token) => {
+      if (token === timerToken) timerCleared = true;
+    };
+    global.fetch = async () => { throw new Error("simulated network failure"); };
+    let openAiNetworkError = null;
+    try {
+      await createOpenAiCompatibleProvider().complete([{ role: "user", content: "test" }], []);
+    } catch (error) {
+      openAiNetworkError = error;
+    } finally {
+      global.setTimeout = realSetTimeout;
+      global.clearTimeout = realClearTimeout;
+    }
+    check(
+      "OpenAI-compatible fetch rejection clears its timeout",
+      openAiNetworkError instanceof Error && timerCleared,
+      timerCleared ? "" : "timeout was not cleared after fetch rejected",
+    );
+    process.env.MODEL_PROVIDER = "gemini";
+    process.env.MODEL_NAME = "";
+
     // 1) success text + request shape + auth header
     let captured = null;
     global.fetch = async (url, opts) => {
