@@ -2,6 +2,7 @@ import { createMcpExpressApp } from "@modelcontextprotocol/express";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
+import { hasValidSession, isAuthorizedMcpRequest, verifyAccessPassword, createSessionCookie } from "./auth.js";
 import { fileURLToPath } from "node:url";
 import * as z from "zod/v4";
 import { loadEnvFile } from "./env.js";
@@ -43,7 +44,8 @@ const parseOriginHostList = (value) =>
       }
     });
 
-const bindHost = process.env.MCP_BIND_HOST || "127.0.0.1";
+const isVercel = process.env.VERCEL === "1";
+const bindHost = process.env.MCP_BIND_HOST || (isVercel ? "0.0.0.0" : "127.0.0.1");
 const port = Number(process.env.PORT || 3000);
 const publicUrl = process.env.MCP_PUBLIC_URL?.trim().replace(/\/+$/, "");
 const authMode = process.env.MCP_AUTH_MODE || "none";
@@ -60,10 +62,14 @@ if (authMode === "oauth") {
   );
 }
 
-if (!loopbackHosts.has(bindHost) || publicUrl) {
+if (!isVercel && (!loopbackHosts.has(bindHost) || publicUrl)) {
   throw new Error(
     "Unauthenticated DupTrace MCP is limited to loopback development; configure the documented OAuth boundary before public exposure"
   );
+}
+
+if (isVercel && authMode !== "none") {
+  throw new Error("Vercel deployment uses the built-in password session boundary; MCP_AUTH_MODE must remain none.");
 }
 
 if (publicUrl) {
@@ -87,9 +93,14 @@ if (publicUrl) {
 }
 
 const configuredAllowedHosts = parseHostList(process.env.MCP_ALLOWED_HOSTS);
+const vercelHosts = isVercel
+  ? [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL].filter(Boolean)
+  : [];
 const allowedHosts =
   configuredAllowedHosts ??
-  (publicHost ? [publicHost] : ["localhost", "127.0.0.1", "[::1]"]);
+  (isVercel
+    ? [...new Set([...vercelHosts, "localhost", "127.0.0.1", "[::1]"])]
+    : publicHost ? [publicHost] : ["localhost", "127.0.0.1", "[::1]"]);
 const allowedOrigins = parseOriginHostList(process.env.MCP_ALLOWED_ORIGINS);
 
 const serviceHealthSnapshots = {
@@ -1393,7 +1404,11 @@ const app = createMcpExpressApp({
 // express ships with the MCP express app. static handles only GET/HEAD, so it
 // falls through to the POST /api/chat and /mcp handlers below.
 const webRoot = fileURLToPath(new URL("./web", import.meta.url));
-app.use(express.static(webRoot));
+app.get("/", (req, res) => {
+  if (isVercel && !hasValidSession(req)) return res.redirect(302, "/login.html");
+  return res.sendFile(fileURLToPath(new URL("./web/index.html", import.meta.url)));
+});
+app.use(express.static(webRoot, { index: false }));
 
 const handler = createMcpHandler(() => {
   const server = new McpServer({
@@ -1949,6 +1964,31 @@ const nodeHandler = toNodeHandler(handler);
 // error.message can carry provider URLs or an upstream HTTP body, so the client
 // only ever receives a stable code and a canned, safe message — never
 // error.message itself. Both /api/chat and /api/chat/stream map through this.
+const loginFailures = new Map();
+app.post("/api/login", (req, res) => {
+  if (!isVercel) return res.status(404).json({ ok: false });
+  const now = Date.now();
+  const key = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").split(",")[0].trim();
+  const state = loginFailures.get(key) || { count: 0, resetAt: now + 15 * 60 * 1000 };
+  if (state.resetAt <= now) { state.count = 0; state.resetAt = now + 15 * 60 * 1000; }
+  if (state.count >= 10) return res.status(429).json({ ok: false, error: "Too many attempts. Try again later." });
+  if (!verifyAccessPassword(req.body?.password)) {
+    state.count += 1; loginFailures.set(key, state);
+    return res.status(401).json({ ok: false, error: "Incorrect password." });
+  }
+  loginFailures.delete(key);
+  try { res.setHeader("Set-Cookie", createSessionCookie()); }
+  catch { return res.status(503).json({ ok: false, error: "Hosted access is not configured yet." }); }
+  return res.status(200).json({ ok: true });
+});
+
+const requireSession = (req, res, next) => {
+  if (!isVercel || hasValidSession(req)) return next();
+  return res.status(401).json({ ok: false, error: { code: "AUTH_REQUIRED", message: "Sign in to use DupTrace." } });
+};
+app.use("/api/chat", requireSession);
+app.use("/api/chat/stream", requireSession);
+
 const chatErrorInfo = (error) => {
   const code = error?.code || "AGENT_ERROR";
   const status =
@@ -2107,6 +2147,10 @@ app.post("/api/chat/stream", async (req, res) => {
 });
 
 app.all("/mcp", (req, res) => {
+  if (isVercel && !isAuthorizedMcpRequest(req)) {
+    res.status(401).json({ error: { code: "MCP_UNAUTHORIZED", message: "Unauthorized." } });
+    return;
+  }
   void nodeHandler(req, res, req.body);
 });
 
@@ -2115,6 +2159,10 @@ const endpoint = publicUrl
   ? `${publicUrl}/mcp`
   : `http://${displayHost}:${port}/mcp`;
 
-app.listen(port, bindHost, () => {
-  console.log(`MCP server listening on ${endpoint}`);
-});
+if (!isVercel) {
+  app.listen(port, bindHost, () => {
+    console.log(`MCP server listening on ${endpoint}`);
+  });
+}
+
+export default app;

@@ -126,7 +126,7 @@ Primary variables (see `.env.example`):
 | `MODEL_PROVIDER` | `gemini`, `openai-compatible`, or `claude-cli`. | *(required)* |
 | `MODEL_NAME` | Primary model id. For gemini, defaults to `gemini-3.5-flash-lite` when empty. | `gemini-3.1-flash-lite` (example) |
 | `MODEL_API_KEY` | Provider API key. Gemini → `x-goog-api-key`; openai-compatible → `Authorization: Bearer`. Unused by `claude-cli`. | *(empty)* |
-| `MODEL_FALLBACK_MODELS` | **Gemini only.** Comma-separated models tried in order on a transient failure. | `gemini-3.5-flash-lite` (example) |
+| `MODEL_FALLBACK_MODELS` | **Gemini only.** Comma-separated models tried in order on a transient failure. | `gemini-3.1-flash-lite` when unset; `.env.example` sets `gemini-3.5-flash-lite` |
 | `MODEL_BASE_URL` | **OpenAI-compatible only.** API base URL (gemini uses Google's fixed endpoint). | `https://api.openai.com/v1` |
 | `MODEL_CLI_COMMAND` | **Claude CLI only.** Executable to invoke. | `claude` |
 | `MAX_AGENT_STEPS` | Max model/tool loop iterations per investigation. | `12` |
@@ -179,7 +179,7 @@ The suite is self-contained — it uses in-process fixtures and **mocked** model
 | `_verify_env.mjs` | The `.env` loader (`env.js`): file parsing, real-env precedence, missing-file no-op. |
 | `_verify_format.mjs` | Pure evidence formatters (labels, previews, facts, causality caveat). |
 | `_verify_markdown.mjs` | The Markdown parser: tables, unsafe HTML/link handling, and partial/streaming safety. |
-| `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
+| `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including OpenAI-compatible timeout cleanup, Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
 | `_verify_web.mjs` | The real server end-to-end with a mocked provider: static assets, `/api/chat`, streaming, request validation, origin guard, follow-up context, MCP initialization, and a secret-leak scan of responses. |
 
 You can also run a one-shot agent request from the CLI (this one **does** use the configured provider and requires a valid key/config):
@@ -192,7 +192,7 @@ npm run agent -- "What's wrong with payments?"
 
 - **Do not commit `.env` or API keys.** `.env` is gitignored; keys belong only in your local `.env`.
 - **Fixture data is demonstrative.** The services, incidents, deployments, and events are static sample data for demonstration — not live telemetry, and not a substitute for production observability or incident response.
-- **Loopback by default.** The server binds to `127.0.0.1` with `MCP_AUTH_MODE=none`; it refuses to start on a non-loopback bind, and OAuth is not implemented (public exposure is deliberately gated behind that unconfigured boundary in code). **However, that guard only governs the server's own bind.** The HTTP API performs **no per-request authentication** on `/api/chat` or `/api/chat/stream`, and the host/origin allowlist is an anti-DNS-rebinding measure, **not** authentication. A reverse proxy, SSH tunnel, container port mapping, or any other external exposure in front of DupTrace would therefore make these endpoints reachable by **unauthenticated clients**. Do not expose the app publicly until proper per-request authentication (the OAuth boundary) is implemented.
+- **Hosted access boundary.** Local development remains loopback-only. On Vercel, set `DUPTRACE_ACCESS_PASSWORD`, `DUPTRACE_SESSION_SECRET`, and `DUPTRACE_INTERNAL_MCP_TOKEN` as project environment variables. The browser uses a signed, expiring HttpOnly/Secure/SameSite session cookie; chat routes require a valid session and the MCP route requires the server-only internal token. Never place these secrets in frontend code or commit them. Set `MODEL_API_KEY` and `MODEL_PROVIDER=gemini` in Vercel as well. The login-attempt throttle is process-local and should not be treated as a substitute for managed identity or edge rate limiting.
 - **Read-only tools.** All MCP tools only read fixture data; there are no remediation or write actions.
 - **No production-readiness claim.** This is a hackathon demonstration. It has not undergone any formal security review or certification.
 
