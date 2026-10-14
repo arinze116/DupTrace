@@ -134,7 +134,12 @@ const createDupTraceClient = async () => {
       versionNegotiation: { mode: "auto" },
     }
   );
-  const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
+  const internalToken = process.env.DUPTRACE_INTERNAL_MCP_TOKEN?.trim();
+  const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
+    ...(process.env.VERCEL === "1" && internalToken
+      ? { requestInit: { headers: { "x-duptrace-internal-token": internalToken } } }
+      : {}),
+  });
 
   try {
     await withTimeout(client.connect(transport), mcpTimeoutMs, "MCP initialize");
