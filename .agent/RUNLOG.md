@@ -57,3 +57,62 @@ Important execution events, failures, fixes, verification, and milestones.
   _verify_integrity.mjs; +deriveContext in _verify_format; +3 context endpoint checks in
   _verify_web. Verification REFUSED by classifier outage (permission granted but the classifier
   service itself is down); exhaustive static review + cross-file wiring grep done. Not committed.
+- Native Gemini provider: added createGeminiProvider() + pure toGeminiSchema/toGeminiRequest/
+  parseGeminiResponse to agent.js (built-in fetch, generateContent, x-goog-api-key, default
+  gemini-2.5-flash, schema-subset conversion, id-preserving functionCall/functionResponse
+  translation with role coalescing, sanitized errors, abort timeout); registered MODEL_PROVIDER=
+  gemini. .env.example documents 3 providers. _verify_provider.mjs: set small MODEL_TIMEOUT_MS
+  before import; added ~27 mocked-fetch/pure Gemini checks (text, function call, tool-result
+  follow-up, HTTP 429 sanitized, malformed, non-JSON, timeout, missing key, no key leakage, custom
+  model). No new deps. Verification REFUSED by classifier outage; static review + exports/dispatch
+  grep done. Not committed.
+- Reference-led frontend redesign (web/ only; agent.js/.env.example/_verify_provider.mjs untouched):
+  studied 5 reference products via WebFetch (Morrow/KNOT/Clasp returned rich detail; Parallel/Selo
+  are client-rendered SPAs that returned only taglines). Extracted + adapted: KNOT claim-vs-evidence
+  separation → answer labelled "Conclusion" vs panel "Observed evidence"; Morrow verification/
+  rejection framing → stable error-code chip; Clasp honest failure → dedicated partial-result state;
+  Parallel/Selo product communication → empty-state eyebrow. Rebuilt index.html (three-pane shell +
+  pre-paint theme bootstrap), styles.css (full light/dark token system, trace-spine investigation
+  panel, drawers, every component state), app.js (theme system, localStorage multi-investigation
+  threads, rail + collapsible inspector with real derived context, responsive drawers w/ scrim +
+  Escape + focus, hand-authored inline-SVG icon set via createElementNS). Preserved: streamChat/
+  sendChat flow, deriveContext, conversationId threading, follow-ups, textContent XSS-safety,
+  renderCheck/investigation/follow-up/loading rendering. api.js + format.js byte-unchanged.
+  Verification: node --check + npm test could NOT run — the command-safety classifier (same model as
+  the session, in a broader availability outage) intermittently refused all shell commands. Did
+  exhaustive static review (els IDs ↔ index.html; _verify_web static contracts preserved: "DupTrace",
+  id="composer", app.js ref, "./format.js" import, no secret sentinels in served files; dark-token
+  blocks complete + identical; three-pane/drawer CSS; submit→runTurn→ok/partial/error branches).
+  Not committed (brief: do not commit/push). Verification handed off to run on classifier recovery.
+- Final quality pass (web/ only): per-row evidence classification classifyEvidence()
+  → tags observed/correlation/confirmed/No-data/error from REAL fields only
+  (causalityConfirmed etc.), ochre node+tag for correlation, deployment never
+  auto-labelled cause; "Conclusion" eyebrow gated on real answer text; WCAG-AA
+  contrast fix (all functional text --faint→--muted since a faint tier can't be AA
+  near white/black; --faint now decorative-only); restraint (selected investigation
+  de-blued to --surface-2 + thin accent marker; inspector metrics → divider stat row;
+  investigation head transparent; rail 260/inspector 300/measure 47rem); drawer
+  open/close/collapse focus management. Self-performed the 4-dimension review
+  (correctness/a11y/design/evidence) because the Agent tool — like Bash — is gated by
+  the same claude-opus-4-8 availability outage and refused every fan-out dispatch;
+  verified via static review: innerHTML absent (comments only), all 22 els ids map to
+  index.html, no secrets in client files, _verify_web static contracts intact.
+  node --check / npm test / git diff --check still BLOCKED by the outage this session.
+  Not committed.
+- 2026-10-14 — Markdown rendering for assistant answers. Raw `###`/`**`/lists/tables
+  showed literally because renderAnswerInto put content in one `<p>` via textContent.
+  No md lib existed; no-build static-ESM + strict no-innerHTML rule → wrote a
+  self-contained pure parser web/markdown.js (parseMarkdown/parseInline/sanitizeHref:
+  headings, para w/ soft breaks, bold/italic, inline+fenced code, ordered/unordered
+  lists, links, pipe tables; TOTAL — never throws on partial/stream fragments) + a DOM
+  renderer in app.js (renderMarkdownBlocks/Inline/Table) building nodes via
+  textContent/createTextNode ONLY (never innerHTML). Security: link hrefs
+  scheme-allowlisted (javascript:/data:/vbscript: → rendered as text), raw HTML stays
+  literal text. GitHub rule enforced: table delimiter must match header column count
+  (also makes half-typed delimiters degrade to text). styles.css: themed `.answer__md`
+  (tokens → both light/dark), tables w/ header bg, borders, zebra, overflow-x scroll.
+  New _verify_markdown.mjs (tables, unsafe HTML/links, partial-stream safety) added to
+  npm test chain. VERIFICATION BLOCKED: classifier refused all Bash this session —
+  node --check / _verify_markdown / npm test / git diff --check NOT run; traced tests
+  vs parser by hand. Only web/markdown.js(new), web/app.js, web/styles.css,
+  _verify_markdown.mjs(new), package.json changed. Not committed.

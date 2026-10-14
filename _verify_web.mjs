@@ -118,6 +118,30 @@ function startServer(port, extraEnv) {
   return child;
 }
 
+// Like startServer, but does NOT export DUPTRACE_MCP_URL and instead points the
+// server at an explicit env file (via DUPTRACE_ENV_FILE) — used to prove the .env
+// file itself is what supplies DUPTRACE_MCP_URL (the MCP-init root cause). Pass a
+// non-existent envFile to simulate a checkout with no .env at all.
+function startServerWithEnvFile({ port, envFile, env }) {
+  const child = spawn(process.execPath, [SERVER], {
+    cwd: HERE,
+    env: {
+      ...env,
+      PORT: String(port),
+      MCP_BIND_HOST: "127.0.0.1",
+      MCP_PUBLIC_URL: "",
+      MCP_AUTH_MODE: "none",
+      DUPTRACE_ENV_FILE: envFile,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (c) => (stderr += c));
+  child.stdout.on("data", () => {});
+  child.getStderr = () => stderr;
+  return child;
+}
+
 async function waitForServer(port, tries = 150) {
   for (let i = 0; i < tries; i += 1) {
     try {
@@ -498,6 +522,90 @@ async function main() {
   }
 
   mock.close();
+
+  // =========================================================================
+  // PHASE C — MCP initialization: .env must supply DUPTRACE_MCP_URL
+  //
+  // Root-cause coverage: agent.js requires DUPTRACE_MCP_URL before it will
+  // connect. The entry points run the file directly, so unless .env is loaded
+  // into process.env, that variable is undefined for a normal `npm start` and MCP
+  // init fails with MCP_UNAVAILABLE. These checks prove (a) a .env file is picked
+  // up WITHOUT the variable being exported, and (b) a genuine absence is reported
+  // as a clear MCP_UNAVAILABLE rather than a crash or a silent success.
+  // =========================================================================
+  const PORT_C = 3102;
+  console.log("\nPhase C — MCP initialization (env-file supplies DUPTRACE_MCP_URL)");
+
+  // A .env whose ONLY source of DUPTRACE_MCP_URL is the file. Spawn server.js with
+  // a scrubbed env (DUPTRACE_MCP_URL deleted) from a temp cwd holding this .env.
+  const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const tmpDir = mkdtempSync(join(tmpdir(), "duptrace-mcp-"));
+  const envFilePath = join(tmpDir, ".env");
+  writeFileSync(
+    envFilePath,
+    [
+      `DUPTRACE_MCP_URL=http://127.0.0.1:${PORT_C}/mcp`,
+      "MODEL_PROVIDER=none",
+      "MAX_AGENT_STEPS=12",
+      "MCP_CLIENT_TIMEOUT_MS=10000",
+      "MODEL_TIMEOUT_MS=60000",
+      "MODEL_CLI_TIMEOUT_MS=180000",
+      "",
+    ].join("\n"),
+  );
+
+  const scrubbed = { ...process.env };
+  delete scrubbed.DUPTRACE_MCP_URL; // the file must supply it
+  delete scrubbed.MODEL_PROVIDER;
+
+  const serverC = startServerWithEnvFile({ port: PORT_C, envFile: envFilePath, env: scrubbed });
+  try {
+    const upC = await waitForServer(PORT_C);
+    check("env-file server started (MCP_PUBLIC_URL empty is tolerated)", upC);
+    if (upC) {
+      // MODEL_PROVIDER=none → the provider fails AFTER a successful MCP connect.
+      // If MCP init had failed, the error code would be MCP_UNAVAILABLE instead of
+      // MODEL_PROVIDER_UNAVAILABLE — so this code distinction proves MCP connected.
+      const res = await post(PORT_C, { message: "What's wrong with payments?" });
+      const code = res.json?.error?.code;
+      check(
+        "with .env present (no exported DUPTRACE_MCP_URL) → MCP connects (error is MODEL_PROVIDER_*, not MCP_*)",
+        code === "MODEL_PROVIDER_UNAVAILABLE",
+        `code ${code}`,
+      );
+    }
+  } finally {
+    serverC.kill();
+  }
+
+  // Negative control: the SAME server pointed at a NON-EXISTENT env file and with
+  // no exported variable must fail with MCP_UNAVAILABLE (proves the check above is
+  // actually sensitive to the variable, not passing for an unrelated reason).
+  const missingEnvPath = join(tmpDir, "no-such-file.env");
+  const serverC2 = startServerWithEnvFile({ port: PORT_C + 1, envFile: missingEnvPath, env: scrubbed });
+  try {
+    const upC2 = await waitForServer(PORT_C + 1);
+    if (upC2) {
+      const res2 = await post(PORT_C + 1, { message: "What's wrong with payments?" });
+      const code2 = res2.json?.error?.code;
+      check(
+        "no .env and no exported var → MCP_UNAVAILABLE (negative control)",
+        code2 === "MCP_UNAVAILABLE",
+        `code ${code2}`,
+      );
+    } else {
+      check("negative-control server started", false, serverC2.getStderr().slice(0, 200));
+    }
+  } finally {
+    serverC2.kill();
+  }
+
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
 
   // --- summary --------------------------------------------------------------
   const passed = results.filter((r) => r.ok).length;

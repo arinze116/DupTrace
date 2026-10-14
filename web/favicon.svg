@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="DupTrace">
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="#111317" />
+  <path
+    d="M4.5 17H10L13.5 8.5L17 23L20 17H27.5"
+    fill="none"
+    stroke="#ffffff"
+    stroke-width="2.8"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

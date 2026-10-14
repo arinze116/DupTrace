@@ -4,9 +4,17 @@ import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
 import { fileURLToPath } from "node:url";
 import * as z from "zod/v4";
+import { loadEnvFile } from "./env.js";
 import { runAgent } from "./agent.js";
 import { assertTimelineIntegrity } from "./fixture_integrity.js";
 import { sanitizeChatContext } from "./chat_context.js";
+
+// Load .env before any configuration is read (see env.js). Import is hoisted, but
+// this call runs before the config reads below. Real env vars always win.
+// DUPTRACE_ENV_FILE overrides the file path (deployments and tests).
+loadEnvFile(
+  process.env.DUPTRACE_ENV_FILE || fileURLToPath(new URL("./.env", import.meta.url)),
+);
 
 const supportedServices = [
   "payments",
