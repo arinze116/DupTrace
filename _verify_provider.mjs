@@ -7,10 +7,11 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { writeFileSync, unlinkSync } from "node:fs";
+import { writeFileSync, unlinkSync, chmodSync } from "node:fs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STUB = join(HERE, "_stub_claude.mjs");
+const STUB_LAUNCHER = join(HERE, "_stub_claude_launcher.sh");
 const TIMEOUT_MS = 8000;
 const GEMINI_TIMEOUT_MS = 1000;
 
@@ -67,9 +68,13 @@ const messages = [{ role: "user", content: "What's wrong with payments?" }];
 
 async function runProvider(scenario) {
   process.env.STUB_SCENARIO = scenario;
-  // Invoke the stub through node; shell:true (win32) appends the provider's flags,
-  // which the stub ignores.
-  process.env.MODEL_CLI_COMMAND = `"${process.execPath}" "${STUB}"`;
+  // On Windows, shell:true permits a quoted command plus script path. On POSIX,
+  // use an executable shim that ignores the Claude-specific flags appended by
+  // createClaudeCliProvider and launches the Node stub directly.
+  process.env.MODEL_CLI_COMMAND =
+    process.platform === "win32"
+      ? `"${process.execPath}" "${STUB}"`
+      : STUB_LAUNCHER;
   const provider = createClaudeCliProvider();
   const started = Date.now();
   try {
@@ -82,6 +87,14 @@ async function runProvider(scenario) {
 
 async function main() {
   writeFileSync(STUB, stubSource);
+  if (process.platform !== "win32") {
+    const quoteShell = (value) => `'${String(value).replace(/'/g, "'\\''")}'`;
+    writeFileSync(
+      STUB_LAUNCHER,
+      `#!/bin/sh\nexec ${quoteShell(process.execPath)} ${quoteShell(STUB)}\n`,
+    );
+    chmodSync(STUB_LAUNCHER, 0o755);
+  }
 
   try {
     console.log("\nparseClaudeAgentResponse — pure schema handling");
@@ -182,6 +195,11 @@ async function main() {
   } finally {
     try {
       unlinkSync(STUB);
+    } catch {
+      /* ignore */
+    }
+    try {
+      unlinkSync(STUB_LAUNCHER);
     } catch {
       /* ignore */
     }
