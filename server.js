@@ -1404,8 +1404,7 @@ const app = createMcpExpressApp({
 // express ships with the MCP express app. static handles only GET/HEAD, so it
 // falls through to the POST /api/chat and /mcp handlers below.
 const webRoot = fileURLToPath(new URL("./web", import.meta.url));
-app.get("/", (req, res) => {
-  if (isVercel && !hasValidSession(req)) return res.redirect(302, "/login.html");
+app.get("/", (_req, res) => {
   return res.sendFile(fileURLToPath(new URL("./web/index.html", import.meta.url)));
 });
 app.use(express.static(webRoot, { index: false }));
@@ -1964,31 +1963,6 @@ const nodeHandler = toNodeHandler(handler);
 // error.message can carry provider URLs or an upstream HTTP body, so the client
 // only ever receives a stable code and a canned, safe message — never
 // error.message itself. Both /api/chat and /api/chat/stream map through this.
-const loginFailures = new Map();
-app.post("/api/login", (req, res) => {
-  if (!isVercel) return res.status(404).json({ ok: false });
-  const now = Date.now();
-  const key = String(req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown").split(",")[0].trim();
-  const state = loginFailures.get(key) || { count: 0, resetAt: now + 15 * 60 * 1000 };
-  if (state.resetAt <= now) { state.count = 0; state.resetAt = now + 15 * 60 * 1000; }
-  if (state.count >= 10) return res.status(429).json({ ok: false, error: "Too many attempts. Try again later." });
-  if (!verifyAccessPassword(req.body?.password)) {
-    state.count += 1; loginFailures.set(key, state);
-    return res.status(401).json({ ok: false, error: "Incorrect password." });
-  }
-  loginFailures.delete(key);
-  try { res.setHeader("Set-Cookie", createSessionCookie()); }
-  catch { return res.status(503).json({ ok: false, error: "Hosted access is not configured yet." }); }
-  return res.status(200).json({ ok: true });
-});
-
-const requireSession = (req, res, next) => {
-  if (!isVercel || hasValidSession(req)) return next();
-  return res.status(401).json({ ok: false, error: { code: "AUTH_REQUIRED", message: "Sign in to use DupTrace." } });
-};
-app.use("/api/chat", requireSession);
-app.use("/api/chat/stream", requireSession);
-
 const chatErrorInfo = (error) => {
   const code = error?.code || "AGENT_ERROR";
   const status =
