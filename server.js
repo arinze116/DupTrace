@@ -2,7 +2,7 @@ import { createMcpExpressApp } from "@modelcontextprotocol/express";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
-import { hasValidSession, isAuthorizedMcpRequest, verifyAccessPassword, createSessionCookie } from "./auth.js";
+import { isAuthorizedMcpRequest } from "./auth.js";
 import { fileURLToPath } from "node:url";
 import * as z from "zod/v4";
 import { loadEnvFile } from "./env.js";
