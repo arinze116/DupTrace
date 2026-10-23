@@ -2,6 +2,8 @@
 
 **Trace the signal. Find the cause.**
 
+**Live demo:** https://duptrace.vercel.app
+
 DupTrace is an evidence-first incident-investigation assistant. It runs a multi-step, agentic workflow over [Model Context Protocol (MCP)](https://modelcontextprotocol.io) tools to inspect service health, incidents, deployments, and operational events, then reasons over what it gathered — while keeping the underlying evidence inspectable and keeping correlation clearly separate from proven causation.
 
 > The incident data in this repository is **demonstrative fixture data**, not a live production monitoring integration.
@@ -75,8 +77,8 @@ No external database or extra services are required — the MCP server and fixtu
 1. **Clone and install**
 
    ```bash
-   git clone <your-fork-url> amazon-alexa-mcp
-   cd amazon-alexa-mcp
+   git clone <your-fork-url> DupTrace
+   cd DupTrace
    npm install
    ```
 
