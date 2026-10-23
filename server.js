@@ -2,6 +2,7 @@ import { createMcpExpressApp } from "@modelcontextprotocol/express";
 import { createMcpHandler, McpServer } from "@modelcontextprotocol/server";
 import { toNodeHandler } from "@modelcontextprotocol/node";
 import express from "express";
+import { isAuthorizedMcpRequest } from "./auth.js";
 import { fileURLToPath } from "node:url";
 import * as z from "zod/v4";
 import { loadEnvFile } from "./env.js";
@@ -43,7 +44,8 @@ const parseOriginHostList = (value) =>
       }
     });
 
-const bindHost = process.env.MCP_BIND_HOST || "127.0.0.1";
+const isVercel = process.env.VERCEL === "1";
+const bindHost = process.env.MCP_BIND_HOST || (isVercel ? "0.0.0.0" : "127.0.0.1");
 const port = Number(process.env.PORT || 3000);
 const publicUrl = process.env.MCP_PUBLIC_URL?.trim().replace(/\/+$/, "");
 const authMode = process.env.MCP_AUTH_MODE || "none";
@@ -60,10 +62,14 @@ if (authMode === "oauth") {
   );
 }
 
-if (!loopbackHosts.has(bindHost) || publicUrl) {
+if (!isVercel && (!loopbackHosts.has(bindHost) || publicUrl)) {
   throw new Error(
     "Unauthenticated DupTrace MCP is limited to loopback development; configure the documented OAuth boundary before public exposure"
   );
+}
+
+if (isVercel && authMode !== "none") {
+  throw new Error("Vercel deployment uses the server-only MCP token boundary; MCP_AUTH_MODE must remain none.");
 }
 
 if (publicUrl) {
@@ -87,9 +93,14 @@ if (publicUrl) {
 }
 
 const configuredAllowedHosts = parseHostList(process.env.MCP_ALLOWED_HOSTS);
+const vercelHosts = isVercel
+  ? [process.env.VERCEL_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL].filter(Boolean)
+  : [];
 const allowedHosts =
   configuredAllowedHosts ??
-  (publicHost ? [publicHost] : ["localhost", "127.0.0.1", "[::1]"]);
+  (isVercel
+    ? [...new Set([...vercelHosts, "localhost", "127.0.0.1", "[::1]"])]
+    : publicHost ? [publicHost] : ["localhost", "127.0.0.1", "[::1]"]);
 const allowedOrigins = parseOriginHostList(process.env.MCP_ALLOWED_ORIGINS);
 
 const serviceHealthSnapshots = {
@@ -1393,7 +1404,10 @@ const app = createMcpExpressApp({
 // express ships with the MCP express app. static handles only GET/HEAD, so it
 // falls through to the POST /api/chat and /mcp handlers below.
 const webRoot = fileURLToPath(new URL("./web", import.meta.url));
-app.use(express.static(webRoot));
+app.get("/", (_req, res) => {
+  return res.sendFile(fileURLToPath(new URL("./web/index.html", import.meta.url)));
+});
+app.use(express.static(webRoot, { index: false }));
 
 const handler = createMcpHandler(() => {
   const server = new McpServer({
@@ -2107,6 +2121,10 @@ app.post("/api/chat/stream", async (req, res) => {
 });
 
 app.all("/mcp", (req, res) => {
+  if (isVercel && !isAuthorizedMcpRequest(req)) {
+    res.status(401).json({ error: { code: "MCP_UNAUTHORIZED", message: "Unauthorized." } });
+    return;
+  }
   void nodeHandler(req, res, req.body);
 });
 
@@ -2115,6 +2133,10 @@ const endpoint = publicUrl
   ? `${publicUrl}/mcp`
   : `http://${displayHost}:${port}/mcp`;
 
-app.listen(port, bindHost, () => {
-  console.log(`MCP server listening on ${endpoint}`);
-});
+if (!isVercel) {
+  app.listen(port, bindHost, () => {
+    console.log(`MCP server listening on ${endpoint}`);
+  });
+}
+
+export default app;

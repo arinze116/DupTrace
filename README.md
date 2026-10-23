@@ -2,6 +2,8 @@
 
 **Trace the signal. Find the cause.**
 
+**Live demo:** https://duptrace.vercel.app
+
 DupTrace is an evidence-first incident-investigation assistant. It runs a multi-step, agentic workflow over [Model Context Protocol (MCP)](https://modelcontextprotocol.io) tools to inspect service health, incidents, deployments, and operational events, then reasons over what it gathered — while keeping the underlying evidence inspectable and keeping correlation clearly separate from proven causation.
 
 > The incident data in this repository is **demonstrative fixture data**, not a live production monitoring integration.
@@ -57,7 +59,7 @@ flowchart LR
 
 **MCP tools** (all read-only): `get_service_health`, `list_active_incidents`, `get_incident`, `list_recent_deployments`, `get_deployment`, `list_service_events`, `get_event`, `get_incident_evidence`, `correlate_incident`, `get_investigation`, `summarize_investigation`, `investigate_incident`.
 
-By default the server binds to loopback (`127.0.0.1`) with no authentication; exposing it publicly is intentionally gated in code behind an unconfigured OAuth boundary.
+For local development, the server binds to loopback (`127.0.0.1`). On Vercel, the web app and chat API are publicly reachable for the hackathon demo, while the `/mcp` endpoint requires a server-only internal token. The hosted chat endpoints do not require a user session or provide per-user rate limiting, so treat this as a public demo using fixture data, not a production service.
 
 ## Requirements
 
@@ -75,8 +77,8 @@ No external database or extra services are required — the MCP server and fixtu
 1. **Clone and install**
 
    ```bash
-   git clone <your-fork-url> amazon-alexa-mcp
-   cd amazon-alexa-mcp
+   git clone <your-fork-url> DupTrace
+   cd DupTrace
    npm install
    ```
 
@@ -126,7 +128,7 @@ Primary variables (see `.env.example`):
 | `MODEL_PROVIDER` | `gemini`, `openai-compatible`, or `claude-cli`. | *(required)* |
 | `MODEL_NAME` | Primary model id. For gemini, defaults to `gemini-3.5-flash-lite` when empty. | `gemini-3.1-flash-lite` (example) |
 | `MODEL_API_KEY` | Provider API key. Gemini → `x-goog-api-key`; openai-compatible → `Authorization: Bearer`. Unused by `claude-cli`. | *(empty)* |
-| `MODEL_FALLBACK_MODELS` | **Gemini only.** Comma-separated models tried in order on a transient failure. | `gemini-3.5-flash-lite` (example) |
+| `MODEL_FALLBACK_MODELS` | **Gemini only.** Comma-separated models tried in order on a transient failure. | `gemini-3.1-flash-lite` when unset; `.env.example` sets `gemini-3.5-flash-lite` |
 | `MODEL_BASE_URL` | **OpenAI-compatible only.** API base URL (gemini uses Google's fixed endpoint). | `https://api.openai.com/v1` |
 | `MODEL_CLI_COMMAND` | **Claude CLI only.** Executable to invoke. | `claude` |
 | `MAX_AGENT_STEPS` | Max model/tool loop iterations per investigation. | `12` |
@@ -179,7 +181,7 @@ The suite is self-contained — it uses in-process fixtures and **mocked** model
 | `_verify_env.mjs` | The `.env` loader (`env.js`): file parsing, real-env precedence, missing-file no-op. |
 | `_verify_format.mjs` | Pure evidence formatters (labels, previews, facts, causality caveat). |
 | `_verify_markdown.mjs` | The Markdown parser: tables, unsafe HTML/link handling, and partial/streaming safety. |
-| `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
+| `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including OpenAI-compatible timeout cleanup, Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
 | `_verify_web.mjs` | The real server end-to-end with a mocked provider: static assets, `/api/chat`, streaming, request validation, origin guard, follow-up context, MCP initialization, and a secret-leak scan of responses. |
 
 You can also run a one-shot agent request from the CLI (this one **does** use the configured provider and requires a valid key/config):
@@ -192,7 +194,7 @@ npm run agent -- "What's wrong with payments?"
 
 - **Do not commit `.env` or API keys.** `.env` is gitignored; keys belong only in your local `.env`.
 - **Fixture data is demonstrative.** The services, incidents, deployments, and events are static sample data for demonstration — not live telemetry, and not a substitute for production observability or incident response.
-- **Loopback by default.** The server binds to `127.0.0.1` with `MCP_AUTH_MODE=none`; it refuses to start on a non-loopback bind, and OAuth is not implemented (public exposure is deliberately gated behind that unconfigured boundary in code). **However, that guard only governs the server's own bind.** The HTTP API performs **no per-request authentication** on `/api/chat` or `/api/chat/stream`, and the host/origin allowlist is an anti-DNS-rebinding measure, **not** authentication. A reverse proxy, SSH tunnel, container port mapping, or any other external exposure in front of DupTrace would therefore make these endpoints reachable by **unauthenticated clients**. Do not expose the app publicly until proper per-request authentication (the OAuth boundary) is implemented.
+- **Hosted demo security.** The Vercel demo intentionally has no login screen: `/api/chat` and `/api/chat/stream` are publicly reachable and do not require a user session. The `/mcp` route is restricted with the server-only `DUPTRACE_INTERNAL_MCP_TOKEN`. Configure `DUPTRACE_INTERNAL_MCP_TOKEN`, `MODEL_API_KEY`, and `MODEL_PROVIDER=gemini` in Vercel Project Settings; never put secrets in frontend code or commit them. Because the chat API has no per-user authentication or rate limiting, keep the hosted demo limited to its included fixture data and monitor provider usage. This is a hackathon demo, not a production deployment.
 - **Read-only tools.** All MCP tools only read fixture data; there are no remediation or write actions.
 - **No production-readiness claim.** This is a hackathon demonstration. It has not undergone any formal security review or certification.
 

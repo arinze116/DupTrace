@@ -120,7 +120,7 @@ const createDupTraceClient = async () => {
   let mcpUrl;
 
   try {
-    mcpUrl = getRequiredEnvironment("DUPTRACE_MCP_URL");
+    mcpUrl = process.env.DUPTRACE_MCP_URL?.trim() || (process.env.VERCEL === "1" && (process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL) ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL}/mcp` : getRequiredEnvironment("DUPTRACE_MCP_URL"));
   } catch (error) {
     throw createAgentError("MCP_UNAVAILABLE", error.message, error);
   }
@@ -134,7 +134,12 @@ const createDupTraceClient = async () => {
       versionNegotiation: { mode: "auto" },
     }
   );
-  const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
+  const internalToken = process.env.DUPTRACE_INTERNAL_MCP_TOKEN?.trim();
+  const transport = new StreamableHTTPClientTransport(new URL(mcpUrl), {
+    ...(process.env.VERCEL === "1" && internalToken
+      ? { requestInit: { headers: { "x-duptrace-internal-token": internalToken } } }
+      : {}),
+  });
 
   try {
     await withTimeout(client.connect(transport), mcpTimeoutMs, "MCP initialize");
@@ -179,7 +184,7 @@ const parseToolArguments = (value) => {
   }
 };
 
-const createOpenAiCompatibleProvider = () => {
+export const createOpenAiCompatibleProvider = () => {
   let apiKey;
   let model;
 
@@ -230,29 +235,30 @@ const createOpenAiCompatibleProvider = () => {
     async complete(messages, tools) {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), modelTimeoutMs);
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model,
-          messages: messages.map(toProviderMessage),
-          tools: tools.map((tool) => ({
-            type: "function",
-            function: {
-              name: tool.name,
-              description: tool.description,
-              parameters: tool.inputSchema,
-            },
-          })),
-          tool_choice: "auto",
-        }),
-      });
 
       try {
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model,
+            messages: messages.map(toProviderMessage),
+            tools: tools.map((tool) => ({
+              type: "function",
+              function: {
+                name: tool.name,
+                description: tool.description,
+                parameters: tool.inputSchema,
+              },
+            })),
+            tool_choice: "auto",
+          }),
+        });
+
         if (!response.ok) {
           throw new Error(
             `Model provider returned HTTP ${response.status}: ${await response.text()}`

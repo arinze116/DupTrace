@@ -4,7 +4,7 @@
   "description": "Evidence-first operational incident investigation with MCP tools and conversational follow-up context",
   "main": "server.js",
   "scripts": {
-    "test": "node _verify_integrity.mjs && node _verify_env.mjs && node _verify_format.mjs && node _verify_markdown.mjs && node _verify_provider.mjs && node _verify_web.mjs",
+    "test": "node _verify_integrity.mjs && node _verify_env.mjs && node _verify_format.mjs && node _verify_markdown.mjs && node _verify_provider.mjs && node _verify_auth.mjs && node _verify_web.mjs",
     "start": "tsx server.js",
     "dev": "tsx watch server.js",
     "agent": "node agent.js"
