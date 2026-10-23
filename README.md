@@ -35,7 +35,7 @@ A single Node.js process hosts both the web application and the MCP server:
 - **Web interface** (`web/`) — plain HTML, CSS, and browser JavaScript (no build step). The browser talks only to the app's HTTP API, never to MCP directly.
 - **Application / API** (`server.js`) — an Express app that serves the static UI and the chat endpoints, and mounts the MCP server at `/mcp`.
 - **Agent + model provider** (`agent.js`) — the server-side agent loop. It acts as an **MCP client**, connecting to `DUPTRACE_MCP_URL` (the same process's `/mcp` over loopback), discovering the tools, and running the model↔tool loop. The model provider is pluggable: Gemini, an OpenAI-compatible API, or a local Claude CLI.
-- **MCP server + fixtures** (`server.js`) — registers the read-only tools backed by in-repo fixture data.
+- **MCP server + fixtures** (`server.js`) — registers the read-only tools backed by in-repo fixture data and serves them over Streamable HTTP. The server uses `createMcpHandler`; the agent connects with `StreamableHTTPClientTransport` and automatic protocol-version negotiation. The locked MCP SDK v2 supports the 2025-11-25 protocol family and later revisions.
 
 ```mermaid
 flowchart LR
@@ -79,7 +79,7 @@ No external database or extra services are required — the MCP server and fixtu
    ```bash
    git clone <your-fork-url> DupTrace
    cd DupTrace
-   npm install
+   npm ci
    ```
 
 2. **Create your environment file**
@@ -182,6 +182,7 @@ The suite is self-contained — it uses in-process fixtures and **mocked** model
 | `_verify_format.mjs` | Pure evidence formatters (labels, previews, facts, causality caveat). |
 | `_verify_markdown.mjs` | The Markdown parser: tables, unsafe HTML/link handling, and partial/streaming safety. |
 | `_verify_provider.mjs` | Model-provider translation/parsing with mocked fetch — including OpenAI-compatible timeout cleanup, Gemini request/response shaping, `thought_signature` preservation, and the fallback chain. |
+| `_verify_auth.mjs` | Server-only MCP token authorization: accepts the configured token and rejects incorrect, missing, or unconfigured tokens. |
 | `_verify_web.mjs` | The real server end-to-end with a mocked provider: static assets, `/api/chat`, streaming, request validation, origin guard, follow-up context, MCP initialization, and a secret-leak scan of responses. |
 
 You can also run a one-shot agent request from the CLI (this one **does** use the configured provider and requires a valid key/config):
