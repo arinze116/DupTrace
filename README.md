@@ -57,7 +57,7 @@ flowchart LR
 
 **MCP tools** (all read-only): `get_service_health`, `list_active_incidents`, `get_incident`, `list_recent_deployments`, `get_deployment`, `list_service_events`, `get_event`, `get_incident_evidence`, `correlate_incident`, `get_investigation`, `summarize_investigation`, `investigate_incident`.
 
-By default the server binds to loopback (`127.0.0.1`) with no authentication; exposing it publicly is intentionally gated in code behind an unconfigured OAuth boundary.
+For local development, the server binds to loopback (`127.0.0.1`). On Vercel, the web app and chat API are publicly reachable for the hackathon demo, while the `/mcp` endpoint requires a server-only internal token. The hosted chat endpoints do not require a user session or provide per-user rate limiting, so treat this as a public demo using fixture data, not a production service.
 
 ## Requirements
 
@@ -192,7 +192,7 @@ npm run agent -- "What's wrong with payments?"
 
 - **Do not commit `.env` or API keys.** `.env` is gitignored; keys belong only in your local `.env`.
 - **Fixture data is demonstrative.** The services, incidents, deployments, and events are static sample data for demonstration — not live telemetry, and not a substitute for production observability or incident response.
-- **Hosted access boundary.** Local development remains loopback-only. On Vercel, set `DUPTRACE_ACCESS_PASSWORD`, `DUPTRACE_SESSION_SECRET`, and `DUPTRACE_INTERNAL_MCP_TOKEN` as project environment variables. The browser uses a signed, expiring HttpOnly/Secure/SameSite session cookie; chat routes require a valid session and the MCP route requires the server-only internal token. Never place these secrets in frontend code or commit them. Set `MODEL_API_KEY` and `MODEL_PROVIDER=gemini` in Vercel as well. The login-attempt throttle is process-local and should not be treated as a substitute for managed identity or edge rate limiting.
+- **Hosted demo security.** The Vercel demo intentionally has no login screen: `/api/chat` and `/api/chat/stream` are publicly reachable and do not require a user session. The `/mcp` route is restricted with the server-only `DUPTRACE_INTERNAL_MCP_TOKEN`. Configure `DUPTRACE_INTERNAL_MCP_TOKEN`, `MODEL_API_KEY`, and `MODEL_PROVIDER=gemini` in Vercel Project Settings; never put secrets in frontend code or commit them. Because the chat API has no per-user authentication or rate limiting, keep the hosted demo limited to its included fixture data and monitor provider usage. This is a hackathon demo, not a production deployment.
 - **Read-only tools.** All MCP tools only read fixture data; there are no remediation or write actions.
 - **No production-readiness claim.** This is a hackathon demonstration. It has not undergone any formal security review or certification.
 
