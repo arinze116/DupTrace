@@ -69,7 +69,7 @@ if (!isVercel && (!loopbackHosts.has(bindHost) || publicUrl)) {
 }
 
 if (isVercel && authMode !== "none") {
-  throw new Error("Vercel deployment uses the built-in password session boundary; MCP_AUTH_MODE must remain none.");
+  throw new Error("Vercel deployment uses the server-only MCP token boundary; MCP_AUTH_MODE must remain none.");
 }
 
 if (publicUrl) {
